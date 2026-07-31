@@ -1,0 +1,39 @@
+# Secrets and Environment Files
+.env
+.env.*
+*.env
+*.json
+!package.json
+!package-lock.json
+!tsconfig.json
+!eslint.config.mjs
+!postcss.config.mjs
+!next.config.ts
+
+# Firebase Service Keys
+*firebase-adminsdk*.json
+serviceAccountKey.json
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.venv/
+ENV/
+.pytest_cache/
+*.log
+backend.log
+backend.err.log
+
+# Next.js / Node
+node_modules/
+.next/
+out/
+build/
+dist/
+tsconfig.tsbuildinfo
+
+# OS Junk
+.DS_Store
+Thumbs.db
