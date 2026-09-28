@@ -17,7 +17,7 @@ import { useState, useEffect } from "react";
 import { apiClient } from "@/utils/api";
 
 export default function ThreatTimelinePage() {
-  const [threats, setThreats] = useState<any[]>(MOCK_THREATS);
+  const [threats, setThreats] = useState<any[]>([]);
 
   useEffect(() => {
     apiClient.get("/threats")

@@ -66,14 +66,15 @@ def run_ingestion_cycle():
 
 def start_scheduler():
     if not scheduler.running:
-        # 1. Ingest RSS alerts every 15 minutes
-        scheduler.add_job(run_ingestion_cycle, "interval", minutes=15, id="rss_feed_job")
-        
-        # 2. Ingest NVD/GitHub every 30 minutes
-        scheduler.add_job(run_ingestion_cycle, "interval", minutes=30, id="nvd_github_job")
-        
-        # 3. Ingest CISA KEV hourly
-        scheduler.add_job(run_ingestion_cycle, "interval", hours=1, id="cisa_kev_job")
+        # Single unified ingestion job every 15 minutes
+        # (Previously 3 separate jobs all called the same function, causing duplicates)
+        scheduler.add_job(
+            run_ingestion_cycle,
+            "interval",
+            minutes=15,
+            id="unified_ingestion_job",
+            replace_existing=True,
+        )
         
         scheduler.start()
         logger.info("Background threat ingestion scheduler started successfully.")

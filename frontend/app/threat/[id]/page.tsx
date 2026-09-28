@@ -4,7 +4,6 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { useState, useEffect } from "react";
 import { apiClient } from "@/utils/api";
-import { MOCK_THREATS } from "@/utils/mockThreats";
 import {
   FiArrowLeft,
   FiShield,
@@ -56,11 +55,7 @@ export default function ThreatDetailsPage() {
         setIsLoading(false);
       })
       .catch((err) => {
-        console.log("Threat details load error, checking local fallback:", err);
-        const fallbackThreat = MOCK_THREATS.find((t) => t.id === id);
-        if (fallbackThreat) {
-          setThreat(fallbackThreat);
-        }
+        console.log("Threat details load error:", err);
         setIsLoading(false);
       });
   }, [id]);

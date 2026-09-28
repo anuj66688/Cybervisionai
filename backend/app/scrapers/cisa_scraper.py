@@ -8,6 +8,8 @@ logger = logging.getLogger("cybervision.scraper.cisa")
 CISA_KEV_URL = "https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json"
 
 class CisaScraper:
+    _network_warned = False
+
     def fetch_vulnerabilities(self) -> List[Dict[str, Any]]:
         logger.info("Ingesting CISA KEV catalog...")
         try:
@@ -17,6 +19,7 @@ class CisaScraper:
                     data = response.json()
                     vulnerabilities = data.get("vulnerabilities", [])
                     logger.info(f"Ingested {len(vulnerabilities)} vulnerabilities from CISA KEV.")
+                    CisaScraper._network_warned = False
                     
                     normalized = []
                     # Process top 15 recent alerts to keep ingestion rates clean
@@ -35,21 +38,15 @@ class CisaScraper:
                             "attackVector": "Network (AV:N/AC:L/PR:N/UI:N)"
                         }, "CISA KEV Feed"))
                     return normalized
+        except (OSError, PermissionError) as e:
+            if not CisaScraper._network_warned:
+                logger.warning(f"Network access blocked — skipping CISA scrape ({e.__class__.__name__})")
+                CisaScraper._network_warned = True
+        except httpx.RequestError as e:
+            if not CisaScraper._network_warned:
+                logger.warning(f"Network unreachable — skipping CISA scrape ({e})")
+                CisaScraper._network_warned = True
         except Exception as e:
-            logger.error(f"Error fetching CISA KEV catalog: {e}. Generating sandbox telemetry.")
+            logger.error(f"Unexpected error fetching CISA KEV catalog: {e}")
             
-        # Return fallback mock items in offline sandbox environments
-        return [
-            normalize_vulnerability({
-                "cve": "CVE-2026-4011",
-                "vendor": "Cisco Systems",
-                "product": "Cisco IOS XE",
-                "threatType": "Authentication Bypass",
-                "severity": "Critical",
-                "publishedDate": "2026-07-08",
-                "summary": "An architectural authentication bypass flaw allows unauthenticated remote administrators to access Web interfaces on active routers.",
-                "remediation": "Disable the HTTP utility on external ports.",
-                "cvssScore": 9.1,
-                "attackVector": "Network (AV:N/AC:L/PR:N/UI:N)"
-            }, "CISA KEV Feed")
-        ]
+        return []

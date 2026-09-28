@@ -11,7 +11,7 @@ import { apiClient } from "@/utils/api";
 
 export default function LoginPage() {
   const router = useRouter();
-  const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
@@ -20,8 +20,15 @@ export default function LoginPage() {
     e.preventDefault();
     setErrorMsg("");
 
-    if (!username || !password) {
+    if (!email || !password) {
       setErrorMsg("Security authentication requires both credentials.");
+      return;
+    }
+
+    // Validate email format before sending to backend (prevents 422)
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      setErrorMsg("Please enter a valid email address (e.g. analyst@cybervision.ai).");
       return;
     }
 
@@ -29,7 +36,7 @@ export default function LoginPage() {
 
     try {
       const response = await apiClient.post("/auth/login", {
-        email: username,
+        email: email,
         password: password,
       });
 
@@ -90,17 +97,18 @@ export default function LoginPage() {
 
         {/* Login Form */}
         <form onSubmit={handleLogin} className="space-y-5 text-xs font-sans">
-          {/* Username */}
+          {/* Email */}
           <div className="space-y-1.5">
-            <label className="text-slate-400 font-medium">Analyst Security ID (Email):</label>
+            <label className="text-slate-400 font-medium">Analyst Email Address:</label>
             <div className="relative">
               <FiUser className="absolute left-3.5 top-3.5 text-slate-400" />
               <input
-                type="text"
+                type="email"
                 placeholder="analyst@cybervision.ai"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
                 disabled={isLoading}
+                autoComplete="email"
                 className="w-full h-11 pl-10 pr-4 rounded-xl bg-white/[0.02] border border-white/10 text-white placeholder-slate-500 focus:outline-none focus:border-cyber-cyan/50 focus:bg-white/[0.04] focus:ring-1 focus:ring-cyber-cyan/20 transition-all font-mono"
               />
             </div>

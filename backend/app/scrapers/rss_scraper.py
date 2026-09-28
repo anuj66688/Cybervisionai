@@ -1,57 +1,64 @@
-import feedparser
 import logging
 from typing import List, Dict, Any
 from app.scrapers.normalizer import normalize_vulnerability
 
 logger = logging.getLogger("cybervision.scraper.rss")
 
-CISA_ADVISORIES_RSS = "https://www.cisa.gov/cybersecurity-advisories/all.xml"
+SECURITY_RSS_FEEDS = [
+    "https://www.bleepingcomputer.com/feed/",
+    "https://feeds.feedburner.com/TheHackersNews"
+]
 
 class RssScraper:
+    _network_warned = False
+
     def fetch_vulnerabilities(self) -> List[Dict[str, Any]]:
         logger.info("Ingesting XML Security RSS feeds...")
+        normalized = []
+        import re
+
         try:
-            feed = feedparser.parse(CISA_ADVISORIES_RSS)
-            entries = feed.entries
-            logger.info(f"Parsed {len(entries)} entries from RSS feed.")
-            
-            normalized = []
-            for entry in entries[:5]:
-                summary_text = entry.get("summary", entry.get("description", "No details."))
+            import feedparser
+        except ImportError:
+            logger.warning("feedparser not installed — skipping RSS scrape")
+            return []
+        
+        for url in SECURITY_RSS_FEEDS:
+            try:
+                feed = feedparser.parse(url)
+                entries = feed.entries
+                logger.info(f"Parsed {len(entries)} entries from RSS feed.")
+                RssScraper._network_warned = False
                 
-                # Check for CVE keywords in summary
-                import re
-                cve_match = re.search(r"CVE-\d{4}-\d+", summary_text)
-                cve = cve_match.group(0) if cve_match else "CVE-2026-RSS"
+                for entry in entries[:5]:
+                    summary_text = entry.get("summary", entry.get("description", "No details."))
+                    # Strip HTML tags from summary
+                    clean_summary = re.sub(r'<[^>]+>', '', summary_text).strip()
+                    
+                    cve_match = re.search(r"CVE-\d{4}-\d+", clean_summary)
+                    cve = cve_match.group(0) if cve_match else f"CVE-2026-{hash(entry.get('title', '')) % 10000:04d}"
+                    
+                    pub_date = entry.get("published", "")
+                    date_str = pub_date[:10] if len(pub_date) >= 10 else "2026-08-01"
+                    
+                    normalized.append(normalize_vulnerability({
+                        "cve": cve,
+                        "vendor": "Security Intel",
+                        "product": entry.get("title", "Ingested RSS Security Advisory"),
+                        "threatType": "Security Broadcast",
+                        "severity": "High" if "exploit" in clean_summary.lower() or "critical" in clean_summary.lower() else "Warning",
+                        "publishedDate": date_str,
+                        "summary": clean_summary[:300] + ("..." if len(clean_summary) > 300 else ""),
+                        "remediation": "Audit network signatures and refer to vendor security releases.",
+                        "cvssScore": 7.5 if "exploit" in clean_summary.lower() else 6.5,
+                        "attackVector": "Network (AV:N/AC:L/PR:N/UI:N)",
+                        "references": [entry.get("link")] if entry.get("link") else []
+                    }, "RSS Advisories Feed"))
+            except (OSError, PermissionError) as e:
+                if not RssScraper._network_warned:
+                    logger.warning(f"Network access blocked — skipping RSS feed {url} ({e.__class__.__name__})")
+                    RssScraper._network_warned = True
+            except Exception as e:
+                logger.error(f"Error parsing RSS feed from {url}: {e}")
                 
-                normalized.append(normalize_vulnerability({
-                    "cve": cve,
-                    "vendor": "Ingested RSS Vendor",
-                    "product": entry.get("title", "Ingested RSS Alert"),
-                    "threatType": "RSS Incident Broadcast",
-                    "severity": "Warning",
-                    "publishedDate": entry.get("published", "").split("T")[0] if "T" in entry.get("published", "") else "2026-07-17",
-                    "summary": summary_text,
-                    "remediation": "Audit network signatures and refer to vendor security releases.",
-                    "cvssScore": 6.8,
-                    "attackVector": "Network (AV:N/AC:L/PR:N/UI:N)"
-                }, "RSS Advisories Feed"))
-            return normalized
-        except Exception as e:
-            logger.error(f"Error parsing XML RSS: {e}. Generating sandbox telemetry.")
-            
-        # Sandbox fallback
-        return [
-            normalize_vulnerability({
-                "cve": "CVE-2026-2810",
-                "vendor": "Apache Software Foundation",
-                "product": "Apache HTTP Server",
-                "threatType": "Path Traversal",
-                "severity": "Warning",
-                "publishedDate": "2026-05-12",
-                "summary": "A path traversal flaw occurs in rewrite configs of Apache HTTP Servers, allowing directory leakage.",
-                "remediation": "Update Apache HTTP Server to version 2.4.63.",
-                "cvssScore": 7.5,
-                "attackVector": "Network (AV:N/AC:L/PR:N/UI:N)"
-            }, "RSS Advisories Feed")
-        ]
+        return normalized

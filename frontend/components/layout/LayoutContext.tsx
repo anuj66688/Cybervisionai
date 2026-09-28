@@ -2,26 +2,31 @@
 
 import React, { createContext, useContext, useState } from "react";
 import { useNotificationFeed } from "@/hooks/useNotificationFeed";
-import { Notification, Severity } from "@/types";
+import { Notification } from "@/types";
 
 interface LayoutContextType {
   isSidebarCollapsed: boolean;
   setSidebarCollapsed: (val: boolean) => void;
   isNotificationOpen: boolean;
   setNotificationOpen: (val: boolean) => void;
-  
+
+  // Telemetry refresh rate (ms)
+  refreshRate: number;
+  setRefreshRate: (val: number) => void;
+
   // Live notification feed properties
   notifications: Notification[];
   isLive: boolean;
   setIsLive: (val: boolean) => void;
-  refreshRate: number;
-  setRefreshRate: (val: number) => void;
   unreadCount: number;
+  activeToast: Notification | null;
+  dismissToast: () => void;
+  isIngestingNvd: boolean;
+  triggerLiveNvdIngestion: () => Promise<any>;
   markAllAsRead: () => void;
   markAsRead: (id: string) => void;
   clearAll: () => void;
-  triggerManualAlert: (severity?: Severity) => void;
-  addCustomNotification: (custom: Partial<Notification>) => void;
+  fetchNotifications: () => void;
 }
 
 const LayoutContext = createContext<LayoutContextType | undefined>(undefined);
@@ -29,6 +34,7 @@ const LayoutContext = createContext<LayoutContextType | undefined>(undefined);
 export function LayoutProvider({ children }: { children: React.ReactNode }) {
   const [isSidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [isNotificationOpen, setNotificationOpen] = useState(false);
+  const [refreshRate, setRefreshRate] = useState(4000);
   const feed = useNotificationFeed();
 
   return (
@@ -38,6 +44,8 @@ export function LayoutProvider({ children }: { children: React.ReactNode }) {
         setSidebarCollapsed,
         isNotificationOpen,
         setNotificationOpen,
+        refreshRate,
+        setRefreshRate,
         ...feed,
       }}
     >

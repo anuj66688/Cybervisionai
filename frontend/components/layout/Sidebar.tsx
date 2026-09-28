@@ -18,6 +18,7 @@ import {
   FiLogOut,
   FiChevronLeft,
   FiChevronRight,
+  FiGrid,
 } from "react-icons/fi";
 import { RiRadarLine } from "react-icons/ri";
 
@@ -25,6 +26,7 @@ const MENU_ITEMS = [
   { name: "Dashboard", href: "/", icon: FiTrendingUp },
   { name: "Live Threat Feed", href: "/threat-feed", icon: FiShield, badge: "LIVE" },
   { name: "Threat Analytics", href: "/threat-analytics", icon: FiActivity },
+  { name: "MITRE Matrix", href: "/mitre-matrix", icon: FiGrid, badge: "NEW" },
   { name: "CVE Explorer", href: "/cve-explorer", icon: FiDatabase },
   { name: "Threat Map", href: "/threat-map", icon: FiGlobe },
   { name: "Threat Timeline", href: "/threat-timeline", icon: FiClock },

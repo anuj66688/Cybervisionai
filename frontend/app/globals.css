@@ -113,3 +113,15 @@
   border-color: rgba(239, 68, 68, 0.6);
   box-shadow: 0 0 15px rgba(239, 68, 68, 0.2);
 }
+
+@keyframes marquee {
+  0% { transform: translateX(0%); }
+  100% { transform: translateX(-50%); }
+}
+
+.animate-marquee {
+  display: inline-block;
+  white-space: nowrap;
+  animation: marquee 25s linear infinite;
+}
+

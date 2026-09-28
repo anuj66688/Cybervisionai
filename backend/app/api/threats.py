@@ -13,12 +13,10 @@ def get_threats(
 ):
     try:
         threats = threat_repo.get_all(limit=limit)
-        # If DB is empty, seed mock list to prevent empty-state blocks
+        # If DB is empty, trigger real ingestion from live endpoints
         if not threats:
-            from app.utils.mockThreats import MOCK_THREATS # wait, we created mockThreats inside utils
-            # Seed mock items into repository
-            for t in MOCK_THREATS:
-                threat_repo.save(t)
+            from app.scheduler.manager import run_ingestion_cycle
+            run_ingestion_cycle()
             threats = threat_repo.get_all(limit=limit)
         return threats
     except Exception as e:

@@ -8,7 +8,7 @@ import { FiDownload, FiInfo, FiActivity, FiRefreshCw } from "react-icons/fi";
 import { motion } from "framer-motion";
 
 export default function ThreatFeedPage() {
-  const [threats, setThreats] = useState<any[]>(MOCK_THREATS);
+  const [threats, setThreats] = useState<any[]>([]);
   const [isExporting, setIsExporting] = useState<string | null>(null);
 
   useEffect(() => {

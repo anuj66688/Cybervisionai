@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from "react";
-import { FiFileText, FiDownload, FiCheckCircle, FiRefreshCw, FiZap } from "react-icons/fi";
-import { motion } from "framer-motion";
-import { MOCK_THREATS } from "@/utils/mockThreats";
+import { useState, useEffect, useCallback } from "react";
+import { FiFileText, FiDownload, FiCheckCircle, FiRefreshCw, FiZap, FiX, FiEye } from "react-icons/fi";
+import { motion, AnimatePresence } from "framer-motion";
+import { apiClient } from "@/utils/api";
 
 const MOCK_REPORTS = [
   { id: "rep-01", name: "Daily Incident Summary Log", date: "2026-07-31", size: "142 KB", type: "Security Log", compliance: "General Ops" },
@@ -18,15 +18,100 @@ export default function ReportsPage() {
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [statusMsg, setStatusMsg] = useState<string | null>(null);
 
+  // PDF Preview modal state
+  const [showPreview, setShowPreview] = useState(false);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [previewReportName, setPreviewReportName] = useState<string>("");
+  const [previewLoading, setPreviewLoading] = useState(false);
+
+  // Clean up blob URL when modal closes
+  useEffect(() => {
+    return () => {
+      if (previewUrl) window.URL.revokeObjectURL(previewUrl);
+    };
+  }, [previewUrl]);
+
+  // Close modal on Escape key
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && showPreview) closePreview();
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [showPreview]);
+
+  const getAuthToken = () => {
+    if (typeof window !== "undefined") {
+      return sessionStorage.getItem("cv_analyst_token") || "cv_active_session_token_secops_lead";
+    }
+    return "cv_active_session_token_secops_lead";
+  };
+
+  const closePreview = useCallback(() => {
+    setShowPreview(false);
+    if (previewUrl) {
+      window.URL.revokeObjectURL(previewUrl);
+      setPreviewUrl(null);
+    }
+    setPreviewReportName("");
+  }, [previewUrl]);
+
+  /** Open a PDF preview modal */
+  const openPdfPreview = async (reportName: string) => {
+    setPreviewReportName(reportName);
+    setPreviewLoading(true);
+    setShowPreview(true);
+
+    try {
+      const response = await fetch("http://localhost:8000/api/reports/pdf/preview", {
+        method: "GET",
+        headers: { Authorization: `Bearer ${getAuthToken()}` },
+      });
+
+      if (!response.ok) throw new Error(`Server returned HTTP ${response.status}`);
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      setPreviewUrl(url);
+    } catch (err) {
+      console.warn("PDF preview failed, generating client-side fallback:", err);
+      // Fallback: generate a simple text-based preview
+      const fallbackContent = await generatePreviewFallback(reportName);
+      const blob = new Blob([fallbackContent], { type: "text/plain;charset=utf-8;" });
+      const url = window.URL.createObjectURL(blob);
+      setPreviewUrl(url);
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
+
+  /** Generate client-side fallback content for preview */
+  const generatePreviewFallback = async (reportName: string): Promise<string> => {
+    let liveThreats: any[] = [];
+    try {
+      const res = await apiClient.get("/threats");
+      if (res.data) liveThreats = res.data;
+    } catch (e) {
+      // ignore
+    }
+
+    let content = `====================================================\nCYBERVISION AI - THREAT TELEMETRY EXECUTIVE REPORT\nReport Title: ${reportName}\nGenerated: ${new Date().toISOString()}\n====================================================\n\n`;
+    liveThreats.forEach((t, i) => {
+      content += `${i + 1}. [${(t.severity || "INFO").toUpperCase()}] ${t.cve} - ${t.vendor} (${t.product})\n`;
+      content += `   Type: ${t.threatType} | CVSS: ${t.cvssScore} | Date: ${t.publishedDate}\n`;
+      content += `   Summary: ${t.summary}\n`;
+      content += `   Remediation: ${t.remediation}\n\n`;
+    });
+    return content;
+  };
+
   const triggerDownload = async (reportName: string, format: "PDF" | "CSV" | "XLSX" | "EXCEL") => {
     const formatKey = format.toLowerCase() === "xlsx" ? "excel" : format.toLowerCase();
     const downloadKey = `${reportName}-${format}`;
     setDownloadingId(downloadKey);
     setStatusMsg(`Compiling and downloading "${reportName}" in ${format} format...`);
 
-    const token = typeof window !== "undefined"
-      ? (sessionStorage.getItem("cv_analyst_token") || "cv_active_session_token_secops_lead")
-      : "cv_active_session_token_secops_lead";
+    const token = getAuthToken();
 
     try {
       const response = await fetch(`http://localhost:8000/api/reports/${formatKey}`, {
@@ -62,14 +147,22 @@ export default function ReportsPage() {
     }
   };
 
-  const generateClientFallbackFile = (reportName: string, format: string) => {
+  const generateClientFallbackFile = async (reportName: string, format: string) => {
     const ext = format.toLowerCase() === "xlsx" ? "csv" : format.toLowerCase();
     let content = "";
     let mimeType = "text/csv;charset=utf-8;";
 
+    let liveThreats: any[] = [];
+    try {
+      const res = await apiClient.get("/threats");
+      if (res.data) liveThreats = res.data;
+    } catch (e) {
+      console.warn("Failed to fetch live threats for export:", e);
+    }
+
     if (ext === "csv" || ext === "xlsx") {
       const headers = ["CVE", "Vendor", "Product", "Severity", "CVSS", "Threat Type", "Status", "Date"];
-      const rows = MOCK_THREATS.map((t) => [
+      const rows = liveThreats.map((t) => [
         t.cve,
         `"${t.vendor}"`,
         `"${t.product}"`,
@@ -82,9 +175,8 @@ export default function ReportsPage() {
       content = [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
       mimeType = "text/csv;charset=utf-8;";
     } else {
-      // Simple formatted text report for PDF fallback download
       content = `====================================================\nCYBERVISION AI - THREAT TELEMETRY EXECUTIVE REPORT\nReport Title: ${reportName}\nGenerated: ${new Date().toISOString()}\n====================================================\n\n`;
-      MOCK_THREATS.forEach((t, i) => {
+      liveThreats.forEach((t, i) => {
         content += `${i + 1}. [${t.severity.toUpperCase()}] ${t.cve} - ${t.vendor} (${t.product})\n`;
         content += `   Type: ${t.threatType} | CVSS: ${t.cvssScore} | Date: ${t.publishedDate}\n`;
         content += `   Summary: ${t.summary}\n`;
@@ -122,7 +214,7 @@ export default function ReportsPage() {
         {/* Global Instant Export Buttons */}
         <div className="flex items-center gap-2">
           <button
-            onClick={() => triggerDownload("Full_Incident_Catalog", "PDF")}
+            onClick={() => openPdfPreview("Full_Incident_Catalog")}
             className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-cyber-cyan/10 hover:bg-cyber-cyan hover:text-[#050816] text-cyber-cyan border border-cyber-cyan/30 text-xs font-semibold tracking-wide transition-all cursor-pointer shadow-[0_0_12px_rgba(6,182,212,0.1)]"
           >
             <FiDownload size={14} />
@@ -194,12 +286,13 @@ export default function ReportsPage() {
             <div className="flex items-center gap-2 pt-4 mt-4 border-t border-white/[0.03] text-[10px] font-bold tracking-wider uppercase select-none">
               <span className="text-slate-500 mr-2 text-[9px]">Download Formats:</span>
               
+              {/* PDF button → opens preview modal */}
               <button
                 disabled={downloadingId === `${r.name}-PDF`}
-                onClick={() => triggerDownload(r.name, "PDF")}
+                onClick={() => openPdfPreview(r.name)}
                 className="flex items-center gap-1 px-2.5 py-1.5 rounded bg-white/5 hover:bg-cyber-cyan hover:text-[#050816] text-slate-300 transition-all border border-white/5 cursor-pointer disabled:opacity-50"
               >
-                {downloadingId === `${r.name}-PDF` ? <FiRefreshCw className="animate-spin" size={10} /> : <FiDownload size={10} />}
+                {downloadingId === `${r.name}-PDF` ? <FiRefreshCw className="animate-spin" size={10} /> : <FiEye size={10} />}
                 <span>PDF</span>
               </button>
 
@@ -224,6 +317,84 @@ export default function ReportsPage() {
           </motion.div>
         ))}
       </div>
+
+      {/* ─── PDF Preview Modal ─── */}
+      <AnimatePresence>
+        {showPreview && (
+          <motion.div
+            key="pdf-preview-overlay"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-sm"
+            onClick={closePreview}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.92, y: 30 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.92, y: 30 }}
+              transition={{ duration: 0.25, ease: "easeOut" }}
+              className="relative w-[92vw] max-w-5xl h-[85vh] rounded-2xl border border-cyber-cyan/20 bg-[#0a0f1e] shadow-[0_0_60px_rgba(6,182,212,0.15)] overflow-hidden flex flex-col"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Modal Header */}
+              <div className="flex items-center justify-between px-5 py-3 border-b border-white/[0.06] bg-[#060b18]/80">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-lg bg-cyber-cyan/10 border border-cyber-cyan/30 flex items-center justify-center">
+                    <FiEye size={16} className="text-cyber-cyan" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-semibold text-white font-display">PDF Report Preview</h3>
+                    <p className="text-[10px] text-slate-500 font-mono">{previewReportName}</p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  {/* Download button inside modal */}
+                  <button
+                    onClick={() => {
+                      triggerDownload(previewReportName, "PDF");
+                    }}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-cyber-cyan/10 hover:bg-cyber-cyan hover:text-[#050816] text-cyber-cyan border border-cyber-cyan/30 text-xs font-semibold tracking-wide transition-all cursor-pointer"
+                  >
+                    <FiDownload size={13} />
+                    <span>Download PDF</span>
+                  </button>
+
+                  {/* Close button */}
+                  <button
+                    onClick={closePreview}
+                    className="w-8 h-8 rounded-lg bg-white/5 hover:bg-red-500/20 hover:text-red-400 text-slate-400 flex items-center justify-center transition-all cursor-pointer border border-white/5"
+                  >
+                    <FiX size={16} />
+                  </button>
+                </div>
+              </div>
+
+              {/* PDF Content Area */}
+              <div className="flex-1 relative">
+                {previewLoading && (
+                  <div className="absolute inset-0 flex items-center justify-center bg-[#0a0f1e] z-10">
+                    <div className="flex flex-col items-center gap-3">
+                      <FiRefreshCw size={28} className="text-cyber-cyan animate-spin" />
+                      <p className="text-xs text-slate-400 font-mono">Generating PDF preview...</p>
+                    </div>
+                  </div>
+                )}
+
+                {previewUrl && (
+                  <iframe
+                    src={previewUrl}
+                    className="w-full h-full border-0 bg-white"
+                    title="PDF Preview"
+                  />
+                )}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

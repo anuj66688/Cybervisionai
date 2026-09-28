@@ -8,6 +8,8 @@ logger = logging.getLogger("cybervision.scraper.github")
 GITHUB_ADVISORY_URL = "https://api.github.com/advisories"
 
 class GitHubScraper:
+    _network_warned = False
+
     def fetch_vulnerabilities(self) -> List[Dict[str, Any]]:
         logger.info("Accessing GitHub Advisory database...")
         try:
@@ -16,6 +18,7 @@ class GitHubScraper:
                 if response.status_code == 200:
                     advisories = response.json()
                     logger.info(f"Ingested {len(advisories)} advisories from GitHub.")
+                    GitHubScraper._network_warned = False
                     
                     normalized = []
                     for item in advisories[:5]:
@@ -32,7 +35,7 @@ class GitHubScraper:
                         severity = severity_map.get(raw_sev.lower(), "Warning")
                         
                         cvss = item.get("cvss", {})
-                        score = cvss.get("score", 6.5) if cvss else 6.5
+                        score = (cvss.get("score") or 6.5) if cvss else 6.5
                         
                         normalized.append(normalize_vulnerability({
                             "cve": cve,
@@ -47,21 +50,15 @@ class GitHubScraper:
                             "attackVector": "Network (AV:N/AC:L/PR:N/UI:N)"
                         }, "GitHub Advisory Ingest"))
                     return normalized
+        except (OSError, PermissionError) as e:
+            if not GitHubScraper._network_warned:
+                logger.warning(f"Network access blocked — skipping GitHub scrape ({e.__class__.__name__})")
+                GitHubScraper._network_warned = True
+        except httpx.RequestError as e:
+            if not GitHubScraper._network_warned:
+                logger.warning(f"Network unreachable — skipping GitHub scrape ({e})")
+                GitHubScraper._network_warned = True
         except Exception as e:
-            logger.error(f"Error accessing GitHub Advisory DB: {e}. Generating sandbox telemetry.")
+            logger.error(f"Unexpected error accessing GitHub Advisory DB: {e}")
             
-        # Sandbox fallback
-        return [
-            normalize_vulnerability({
-                "cve": "CVE-2026-1144",
-                "vendor": "Kubernetes Project",
-                "product": "Kube-apiserver",
-                "threatType": "IAM Denial of Service",
-                "severity": "Warning",
-                "publishedDate": "2026-07-01",
-                "summary": "An API resource exhaustion loophole in Kube-apiserver lets authenticated cluster tenants flood namespace request pools.",
-                "remediation": "Enforce strict Role-Based Access Controls (RBAC) and network namespace resource quotas.",
-                "cvssScore": 6.5,
-                "attackVector": "Network (AV:N/AC:H/PR:L/UI:N)"
-            }, "GitHub Advisory Ingest")
-        ]
+        return []

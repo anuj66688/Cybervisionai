@@ -13,6 +13,7 @@ from app.api.analytics import router as analytics_router
 from app.api.reports import router as reports_router
 from app.api.scheduler import router as scheduler_router
 from app.api.notifications import router as notifications_router
+from app.api.mitre import router as mitre_router
 
 # Set up logging configuration
 logging.basicConfig(
@@ -28,6 +29,10 @@ async def lifespan(app: FastAPI):
     logger.info("Initializing CyberVision AI backend system...")
     initialize_firebase()
     start_scheduler()
+    # Trigger initial live ingestion cycle asynchronously in background
+    import asyncio
+    from app.scheduler.manager import run_ingestion_cycle
+    asyncio.create_task(asyncio.to_thread(run_ingestion_cycle))
     yield
     # Core Shutdown Actions
     logger.info("Shutting down CyberVision AI backend...")
@@ -55,6 +60,8 @@ app.include_router(analytics_router, prefix=settings.API_V1_STR)
 app.include_router(reports_router, prefix=settings.API_V1_STR)
 app.include_router(scheduler_router, prefix=settings.API_V1_STR)
 app.include_router(notifications_router, prefix=settings.API_V1_STR)
+app.include_router(mitre_router, prefix=settings.API_V1_STR)
+
 
 # API Root Diagnostics Endpoint
 @app.get("/")

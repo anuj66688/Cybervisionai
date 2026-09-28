@@ -1,6 +1,7 @@
 import firebase_admin
 from firebase_admin import credentials, firestore
 import os
+from pathlib import Path
 import logging
 from app.core.config import settings
 
@@ -89,7 +90,10 @@ def initialize_firebase():
             return db
 
         cred_path = settings.FIREBASE_CREDENTIALS_PATH
-        if cred_path and os.path.exists(cred_path):
+        # Normalize path using pathlib to handle forward-slash paths on Windows
+        if cred_path:
+            cred_path = str(Path(cred_path).resolve())
+        if cred_path and Path(cred_path).exists():
             logger.info(f"Loading Firebase credentials from Certificate: {cred_path}")
             cred = credentials.Certificate(cred_path)
             firebase_admin.initialize_app(cred)
